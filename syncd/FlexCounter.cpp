@@ -1860,7 +1860,7 @@ void FlexCounter::flexCounterThreadRunFunction()
 
             std::unique_lock<std::mutex> lk(m_mtxSleep);
 
-            m_cvSleep.wait_for(lk, std::chrono::milliseconds(correction));
+            m_cvSleep.wait_for(lk, std::chrono::milliseconds(correction), [&](){return !m_runFlexCounterThread;});
 
             continue;
         }
@@ -1871,7 +1871,7 @@ void FlexCounter::flexCounterThreadRunFunction()
 
         std::unique_lock<std::mutex> lk(m_mtxSleep);
 
-        m_pollCond.wait(lk); // wait on mutex
+        m_pollCond.wait(lk, [&](){return !m_runFlexCounterThread;}); // wait on mutex
     }
 }
 
@@ -1897,11 +1897,12 @@ void FlexCounter::endFlexCounterThread(void)
         return;
     }
 
-    m_runFlexCounterThread = false;
-
-    m_pollCond.notify_all();
-
-    m_cvSleep.notify_all();
+    {
+        std::unique_lock<std::mutex> lk(m_mtxSleep);
+        m_runFlexCounterThread = false;
+        m_pollCond.notify_all();
+        m_cvSleep.notify_all();
+    }
 
     if (m_flexCounterThread != nullptr)
     {
